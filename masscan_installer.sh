@@ -1,10 +1,9 @@
 #!/bin/bash
 
 #================================================================
-#	项目: masscan 一键脚本
-#	版本: 2.2 (已修正语法错误)
+#	项目: masscan 一键脚本 (通用版)
+#	版本: 3.0 (自动检测系统并使用对应包管理器)
 #	作者: AiLi1337
-#	时间: 2025-06-03
 #================================================================
 
 # 定义颜色
@@ -13,10 +12,31 @@ RED="\033[31m"
 YELLOW="\033[33m"
 RESET="\033[0m"
 
+# 变量
+PKG_MANAGER=""
+INSTALL_CMD=""
+DEPS=""
+
 # 检查是否为root用户
 if [ "$(id -u)" != "0" ]; then
    echo -e "${RED}错误：该脚本必须以 root 权限运行，请使用 'sudo' 或切换到 'root' 用户后重试。${RESET}" 1>&2
    exit 1
+fi
+
+# --- 系统检测和包管理器设置 ---
+if command -v apt-get &> /dev/null; then
+    echo -e "${GREEN}检测到 Debian/Ubuntu 系统。${RESET}"
+    PKG_MANAGER="apt-get"
+    INSTALL_CMD="apt-get install -y"
+    DEPS="git gcc make libpcap-dev"
+elif command -v yum &> /dev/null; then
+    echo -e "${GREEN}检测到 CentOS/RHEL 系统。${RESET}"
+    PKG_MANAGER="yum"
+    INSTALL_CMD="yum install -y"
+    DEPS="git gcc make libpcap-devel" # 注意这里的依赖名是 libpcap-devel
+else
+    echo -e "${RED}错误：无法确定您的操作系统包管理器。该脚本仅支持使用 apt 或 yum 的系统。${RESET}"
+    exit 1
 fi
 
 # masscan的源码和工作目录
@@ -27,15 +47,11 @@ mkdir -p "$MASSCAN_DIR"
 
 # 1. 安装masscan
 install_masscan() {
-    echo -e "${YELLOW}正在更新软件包列表...${RESET}"
-    apt update -y &>/dev/null
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}错误：软件包列表更新失败。${RESET}"
-        exit 1
-    fi
+    echo -e "${YELLOW}正在更新软件包缓存...${RESET}"
+    $PKG_MANAGER update -y &>/dev/null
 
-    echo -e "${YELLOW}正在安装依赖项 (git, gcc, make, libpcap-dev)...${RESET}"
-    apt install -y git gcc make libpcap-dev &>/dev/null
+    echo -e "${YELLOW}正在安装依赖项: $DEPS...${RESET}"
+    $INSTALL_CMD $DEPS
     if [ $? -ne 0 ]; then
         echo -e "${RED}错误：依赖项安装失败。${RESET}"
         exit 1
@@ -167,7 +183,7 @@ uninstall_masscan() {
 show_menu() {
     clear
     echo -e "================================================="
-    echo -e "            ${GREEN}masscan 一键脚本${RESET}            "
+    echo -e "            ${GREEN}masscan 一键脚本 (通用版)${RESET}            "
     echo -e "================================================="
     echo -e " 工作目录: ${YELLOW}${MASSCAN_DIR}${RESET}"
     echo -e "-------------------------------------------------"
