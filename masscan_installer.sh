@@ -2,7 +2,7 @@
 
 #================================================================
 #	项目: masscan 一键脚本
-#	版本: 2.0
+#	版本: 2.1
 #	作者: AiLi
 #	时间: 2025-06-03
 #================================================================
@@ -131,12 +131,12 @@ view_scan_process() {
 
 # 4. 删除 nohup.out 文件
 delete_log_file() {
-    if [ -f "$MASSCAN_DIR/nohup.out" ]; {
+    if [ -f "$MASSCAN_DIR/nohup.out" ]; then
         rm -f "$MASSCAN_DIR/nohup.out"
         echo -e "${GREEN}✅ nohup.out 日志文件已成功删除。${RESET}"
-    } else {
+    else
         echo -e "${RED}未找到 nohup.out 日志文件，无需删除。${RESET}"
-    }
+    fi
     echo -e "\n${GREEN}按 Enter 键返回主菜单...${RESET}"
     read -r
 }
