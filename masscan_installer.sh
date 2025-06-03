@@ -2,7 +2,7 @@
 
 #================================================================
 #	项目: masscan 一键脚本 (通用版)
-#	版本: 3.0 (自动检测系统并使用对应包管理器)
+#	版本: 3.1 (强化卸载功能，修正逻辑)
 #	作者: AiLi1337
 #================================================================
 
@@ -39,7 +39,7 @@ else
     exit 1
 fi
 
-# masscan的源码和工作目录
+# masscan的工作和源码目录
 MASSCAN_DIR="/opt/masscan"
 
 # 确保masscan目录存在
@@ -48,7 +48,12 @@ mkdir -p "$MASSCAN_DIR"
 # 1. 安装masscan
 install_masscan() {
     echo -e "${YELLOW}正在更新软件包缓存...${RESET}"
-    $PKG_MANAGER update -y &>/dev/null
+    # CentOS使用 'yum makecache fast'
+    if [ "$PKG_MANAGER" == "yum" ]; then
+        yum makecache fast &>/dev/null
+    else
+        $PKG_MANAGER update -y &>/dev/null
+    fi
 
     echo -e "${YELLOW}正在安装依赖项: $DEPS...${RESET}"
     $INSTALL_CMD $DEPS
@@ -156,24 +161,39 @@ delete_log_file() {
     read -r
 }
 
-# 5. 卸载 masscan
+# 5. 卸载 masscan (v3.1 新逻辑)
 uninstall_masscan() {
     echo -e "${YELLOW}正在卸载 masscan...${RESET}"
+
+    # 步骤 1: 如果源码目录存在，尝试 'make uninstall'
     if [ -d "$MASSCAN_DIR/masscan" ]; then
+        echo -e "${YELLOW}发现源码目录，正在尝试 'make uninstall'...${RESET}"
         cd "$MASSCAN_DIR/masscan"
         make uninstall &>/dev/null
         cd /root
-        rm -rf "$MASSCAN_DIR"
-        echo -e "${GREEN}✅ masscan 源码目录已删除。${RESET}"
     else
-        echo -e "${YELLOW}未找到 masscan 源码目录。${RESET}"
+        echo -e "${YELLOW}未找到源码目录，将进行强制删除。${RESET}"
     fi
 
-    if ! command -v masscan &> /dev/null; then
-        echo -e "${GREEN}masscan 卸载完成！${RESET}"
-    else
-        echo -e "${RED}❌ 卸载失败，请手动检查。${RESET}"
+    # 步骤 2: 强制删除 masscan 可执行文件
+    if command -v masscan &> /dev/null; then
+        echo -e "${YELLOW}正在删除 masscan 可执行文件: $(command -v masscan)...${RESET}"
+        rm -f "$(command -v masscan)"
     fi
+
+    # 步骤 3: 删除整个工作目录
+    if [ -d "$MASSCAN_DIR" ]; then
+        echo -e "${YELLOW}正在删除工作目录: $MASSCAN_DIR...${RESET}"
+        rm -rf "$MASSCAN_DIR"
+    fi
+
+    # 步骤 4: 最终验证
+    if ! command -v masscan &> /dev/null; then
+        echo -e "\n${GREEN}✅ masscan 已成功卸载！${RESET}"
+    else
+        echo -e "\n${RED}❌ 卸载失败，请手动检查。可能原因：权限不足或文件被占用。${RESET}"
+    fi
+
     echo -e "\n${GREEN}按 Enter 键返回主菜单...${RESET}"
     read -r
 }
@@ -183,7 +203,7 @@ uninstall_masscan() {
 show_menu() {
     clear
     echo -e "================================================="
-    echo -e "            ${GREEN}masscan 一键脚本 (通用版)${RESET}            "
+    echo -e "            ${GREEN}masscan 一键脚本 (v3.1)${RESET}            "
     echo -e "================================================="
     echo -e " 工作目录: ${YELLOW}${MASSCAN_DIR}${RESET}"
     echo -e "-------------------------------------------------"
@@ -200,6 +220,8 @@ show_menu() {
 
 # 主循环
 while true; do
+    # 在显示菜单前，先检测masscan是否已安装，以决定菜单项的可用性
+    # (此部分为未来可优化的功能，暂不实现)
     show_menu
     case $choice in
         1) install_masscan ;;
