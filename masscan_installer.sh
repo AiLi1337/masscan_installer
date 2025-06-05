@@ -2,7 +2,7 @@
 
 #================================================================
 #	项目: masscan 一键脚本 (通用版)
-#	版本: 3.2 (增强交互：自动删日志、补全后缀、查看结果)
+#	版本: 3.3 (增加删除指定XML文件功能)
 #	作者: AiLi1337
 #================================================================
 
@@ -32,7 +32,7 @@ if command -v apt-get &> /dev/null; then
 elif command -v yum &> /dev/null; then
     PKG_MANAGER="yum"
     INSTALL_CMD="yum install -y"
-    DEPS="git gcc make libpcap-devel" # 注意这里的依赖名是 libpcap-devel
+    DEPS="git gcc make libpcap-devel"
 else
     echo -e "${RED}错误：无法确定您的操作系统包管理器。该脚本仅支持使用 apt 或 yum 的系统。${RESET}"
     exit 1
@@ -97,7 +97,6 @@ install_masscan() {
 execute_scan() {
     cd "$MASSCAN_DIR" || exit
     
-    # 自动删除旧的nohup.out文件
     if [ -f "nohup.out" ]; then
         echo -e "${YELLOW}发现旧的 nohup.out 日志文件，已自动删除。${RESET}"
         rm -f "nohup.out"
@@ -119,7 +118,6 @@ execute_scan() {
         return
     fi
     
-    # 自动添加.xml后缀
     filename="${filename_base}.xml"
 
     echo -e "${GREEN}🚀 正在后台启动 masscan 扫描...${RESET}"
@@ -129,7 +127,6 @@ execute_scan() {
 
     if pgrep -f "masscan $ip_ranges" > /dev/null; then
         echo -e "${GREEN}扫描任务已成功启动！PID: $(pgrep -f "masscan $ip_ranges")${RESET}"
-        echo -e "${YELLOW}您可以使用菜单选项 '3' 查看实时扫描进程。${RESET}"
     else
         echo -e "${RED}❌ 错误：扫描任务启动失败。${RESET}"
     fi
@@ -144,18 +141,16 @@ view_scan_process() {
         echo -e "${YELLOW}--- 实时扫描日志 (按 Ctrl+C 停止查看) ---${RESET}"
         tail -f "$MASSCAN_DIR/nohup.out"
     else
-        echo -e "${RED}未找到 nohup.out 日志文件。可能没有正在进行的扫描任务。${RESET}"
+        echo -e "${RED}未找到 nohup.out 日志文件。${RESET}"
     fi
     echo -e "\n${GREEN}按 Enter 键返回主菜单...${RESET}"
     read -r
 }
 
-# 4. 查看已有的XML文件 (新功能)
+# 4. 查看已有的XML文件
 list_xml_files() {
     echo -e "${YELLOW}--- 当前已有的扫描结果文件 ---${RESET}"
-    # 检查目录下是否有.xml文件
     if ls -1 "$MASSCAN_DIR"/*.xml 1>/dev/null 2>&1; then
-        # 使用ls -lht来按时间倒序列出文件，并用awk美化输出
         ls -lht "$MASSCAN_DIR"/*.xml | awk '{print "    " NR ". " $9 "  (" $5 ")  " $6 " " $7 " " $8}' | sed "s|$MASSCAN_DIR/||"
     else
         echo -e "${RED}    当前没有找到任何 .xml 结果文件。${RESET}"
@@ -164,8 +159,68 @@ list_xml_files() {
     read -r
 }
 
+# 5. 删除指定的XML文件 (新功能)
+delete_xml_file() {
+    cd "$MASSCAN_DIR" || exit
+    
+    # 将找到的xml文件名存入数组
+    xml_files=($(ls -1 *.xml 2>/dev/null))
 
-# 5. 删除 nohup.out 文件
+    if [ ${#xml_files[@]} -eq 0 ]; then
+        echo -e "${RED}没有找到任何 .xml 文件可供删除。${RESET}"
+        echo -e "\n${GREEN}按 Enter 键返回主菜单...${RESET}"
+        read -r
+        return
+    fi
+
+    echo -e "${YELLOW}--- 请选择要删除的 .xml 文件 ---${RESET}"
+    # 循环输出带编号的文件列表
+    for i in "${!xml_files[@]}"; do
+        echo -e "    ${CYAN}$(($i + 1))${RESET}. ${xml_files[$i]}"
+    done
+    echo -e "    ${CYAN}0${RESET}. 取消操作"
+    
+    echo -n "请输入数字 [0-$((${#xml_files[@]}))]: "
+    read -r choice
+
+    # 验证输入是否为数字
+    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+        echo -e "\n${RED}错误：请输入一个有效的数字。${RESET}"
+        sleep 2
+        return
+    fi
+    
+    # 处理取消操作
+    if [ "$choice" -eq 0 ]; then
+        echo -e "\n${YELLOW}操作已取消。${RESET}"
+        sleep 1
+        return
+    fi
+    
+    # 验证输入是否在有效范围内
+    if [ "$choice" -gt 0 ] && [ "$choice" -le ${#xml_files[@]} ]; then
+        # 从数组中获取文件名（数组索引从0开始，所以需要减1）
+        target_file=${xml_files[$(($choice - 1))]}
+        
+        echo -en "\n${RED}您确定要永久删除文件 ${CYAN}'$target_file'${RED} 吗？(y/N): ${RESET}"
+        read -r confirm
+        
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+            rm -f "$target_file"
+            echo -e "\n${GREEN}✅ 文件 '$target_file' 已成功删除。${RESET}"
+        else
+            echo -e "\n${YELLOW}删除操作已取消。${RESET}"
+        fi
+    else
+        echo -e "\n${RED}错误：无效的选项 '$choice'。${RESET}"
+    fi
+    
+    echo -e "\n${GREEN}按 Enter 键返回主菜单...${RESET}"
+    read -r
+}
+
+
+# 6. 手动删除 nohup.out 文件
 delete_log_file() {
     if [ -f "$MASSCAN_DIR/nohup.out" ]; then
         rm -f "$MASSCAN_DIR/nohup.out"
@@ -177,10 +232,10 @@ delete_log_file() {
     read -r
 }
 
-# 6. 卸载 masscan
+# 7. 卸载 masscan
 uninstall_masscan() {
     echo -e "${YELLOW}正在卸载 masscan...${RESET}"
-
+    # ... (卸载逻辑保持不变)
     if [ -d "$MASSCAN_DIR/masscan" ]; then
         echo -e "${YELLOW}发现源码目录，正在尝试 'make uninstall'...${RESET}"
         cd "$MASSCAN_DIR/masscan"
@@ -189,45 +244,41 @@ uninstall_masscan() {
     else
         echo -e "${YELLOW}未找到源码目录，将进行强制删除。${RESET}"
     fi
-
     if command -v masscan &> /dev/null; then
         echo -e "${YELLOW}正在删除 masscan 可执行文件: $(command -v masscan)...${RESET}"
         rm -f "$(command -v masscan)"
     fi
-
     if [ -d "$MASSCAN_DIR" ]; then
         echo -e "${YELLOW}正在删除工作目录: $MASSCAN_DIR...${RESET}"
         rm -rf "$MASSCAN_DIR"
     fi
-
     if ! command -v masscan &> /dev/null; then
         echo -e "\n${GREEN}✅ masscan 已成功卸载！${RESET}"
     else
-        echo -e "\n${RED}❌ 卸载失败，请手动检查。可能原因：权限不足或文件被占用。${RESET}"
+        echo -e "\n${RED}❌ 卸载失败，请手动检查。${RESET}"
     fi
-
     echo -e "\n${GREEN}按 Enter 键返回主菜单...${RESET}"
     read -r
 }
-
 
 # 主菜单
 show_menu() {
     clear
     echo -e "================================================="
-    echo -e "            ${GREEN}masscan 一键脚本 (v3.2)${RESET}            "
+    echo -e "            ${GREEN}masscan 一键脚本 (v3.3)${RESET}            "
     echo -e "================================================="
     echo -e " 工作目录: ${CYAN}${MASSCAN_DIR}${RESET}"
     echo -e "-------------------------------------------------"
     echo -e " ${YELLOW}1.${RESET} 安装 masscan"
     echo -e " ${YELLOW}2.${RESET} 执行扫描 (自动清理旧日志)"
     echo -e " ${YELLOW}3.${RESET} 查看扫描进程"
-    echo -e " ${CYAN}4. 查看扫描结果 (.xml 文件)${RESET}  ${GREEN}<- 新功能${RESET}"
-    echo -e " ${YELLOW}5.${RESET} 手动删除 nohup.out 日志"
-    echo -e " ${YELLOW}6.${RESET} 卸载 masscan"
-    echo -e " ${YELLOW}7.${RESET} 退出脚本"
+    echo -e " ${YELLOW}4.${RESET} 查看扫描结果 (.xml 文件)"
+    echo -e " ${CYAN}5. 删除指定 .xml 文件${RESET}         ${GREEN}<- 新功能${RESET}"
+    echo -e " ${YELLOW}6.${RESET} 手动删除 nohup.out 日志"
+    echo -e " ${YELLOW}7.${RESET} 卸载 masscan"
+    echo -e " ${YELLOW}8.${RESET} 退出脚本"
     echo -e "================================================="
-    echo -n "请输入选项 [1-7]: "
+    echo -n "请输入选项 [1-8]: "
     read -r choice
 }
 
@@ -238,10 +289,11 @@ while true; do
         1) install_masscan ;;
         2) execute_scan ;;
         3) view_scan_process ;;
-        4) list_xml_files ;; # 新功能
-        5) delete_log_file ;;
-        6) uninstall_masscan ;;
-        7) echo -e "${GREEN}👋 感谢使用，正在退出...${RESET}"; exit 0 ;;
-        *) echo -e "${RED}无效选项，请输入 1 到 7 之间的数字。${RESET}"; sleep 2 ;;
+        4) list_xml_files ;;
+        5) delete_xml_file ;; # 新功能
+        6) delete_log_file ;;
+        7) uninstall_masscan ;;
+        8) echo -e "${GREEN}👋 感谢使用，正在退出...${RESET}"; exit 0 ;;
+        *) echo -e "${RED}无效选项，请输入 1 到 8 之间的数字。${RESET}"; sleep 2 ;;
     esac
 done
