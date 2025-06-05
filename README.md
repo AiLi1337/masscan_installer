@@ -3,7 +3,7 @@ masscan一键脚本
 ```bash
 bash <(curl -sL https://raw.githubusercontent.com/AiLi1337/masscan_installer/main/masscan_installer.sh)
 ```
-
+```bash
 =================================================
             masscan 一键脚本 (v3.2)            
 =================================================
@@ -17,3 +17,4 @@ bash <(curl -sL https://raw.githubusercontent.com/AiLi1337/masscan_installer/mai
  6. 卸载 masscan
  7. 退出脚本
 =================================================
+```
